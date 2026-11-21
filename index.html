@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>آوردگاه</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="site-header">
+        <h1>طبیعی گردی</h1>
+        <p>جدید ترین جلد</p>
+    </header>
+
+    <main>
+    <div id="book" style="height: 80vh;">
+        <!-- Custom controls – must be inside #book so they survive fullscreen -->
+        <div class="book-controls" id="bookControls" hidden>
+            <div class="page-nav">
+                <button type="button" class="nav-btn" id="prevBtn" aria-label="Previous page" title="Previous">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
+
+                <div class="slider-wrap">
+                    <input type="range" id="pageSlider" min="1" max="1" value="1" step="1" aria-label="Page navigation">
+                    <div class="page-label">
+                        <span id="currentPageLabel">1</span>
+                        <span class="sep">/</span>
+                        <span id="totalPagesLabel">1</span>
+                    </div>
+                </div>
+
+                <button type="button" class="nav-btn" id="nextBtn" aria-label="Next page" title="Next">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                </button>
+            </div>
+
+            <button type="button" class="fullscreen-btn" id="fullscreenBtn" aria-label="Toggle fullscreen" title="Fullscreen">
+                <svg class="icon-expand" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <polyline points="9 21 3 21 3 15"></polyline>
+                    <line x1="21" y1="3" x2="14" y2="10"></line>
+                    <line x1="3" y1="21" x2="10" y2="14"></line>
+                </svg>
+                <svg class="icon-compress" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden>
+                    <polyline points="4 14 10 14 10 20"></polyline>
+                    <polyline points="20 10 14 10 14 4"></polyline>
+                    <line x1="14" y1="10" x2="21" y2="3"></line>
+                    <line x1="3" y1="21" x2="10" y2="14"></line>
+                </svg>
+            </button>
+        </div>
+    </div>
+</main>
+
+    <footer>
+        <p>© sovereign</p>
+    </footer>
+
+    <script src="pdflipbook.js"></script>
+    <script>
+        (function () {
+            const bookEl = document.getElementById('book');
+            const controls = document.getElementById('bookControls');
+            const pageSlider = document.getElementById('pageSlider');
+            const currentPageLabel = document.getElementById('currentPageLabel');
+            const totalPagesLabel = document.getElementById('totalPagesLabel');
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            const fullscreenBtn = document.getElementById('fullscreenBtn');
+            const iconExpand = fullscreenBtn.querySelector('.icon-expand');
+            const iconCompress = fullscreenBtn.querySelector('.icon-compress');
+
+            let book = null;
+            let totalPages = 1;
+            let isUpdatingSlider = false;
+
+            // Create the flipbook via JS API so we have the instance
+            book = PDFlipbook.create(bookEl, {
+                url: 'magazine.pdf',
+                controls: true,          // keep built-in zoom / mode / fullscreen buttons
+                arrows: true,
+                pageNumbers: true,
+                shadow: 'fullscreen',
+                displayMode: 'auto'
+            });
+
+            // --- Sync helpers ---
+            function updateUI(page, pages) {
+                totalPages = pages || totalPages;
+                const current = Math.max(1, Math.min(page || 1, totalPages));
+
+                isUpdatingSlider = true;
+                pageSlider.max = totalPages;
+                pageSlider.value = current;
+                isUpdatingSlider = false;
+
+                currentPageLabel.textContent = current;
+                totalPagesLabel.textContent = totalPages;
+
+                prevBtn.disabled = current <= 1;
+                nextBtn.disabled = current >= totalPages;
+            }
+
+            // Ready: show controls + set total pages
+            bookEl.addEventListener('flipbook:ready', (e) => {
+                const pages = e.detail.pages || 1;
+                updateUI(1, pages);
+                controls.hidden = false;
+            });
+
+            // Page changes (from flips, arrows, keyboard, etc.)
+            bookEl.addEventListener('flipbook:pagechange', (e) => {
+                updateUI(e.detail.page, e.detail.pages);
+            });
+
+            // Slider → jump to page
+            pageSlider.addEventListener('input', () => {
+                if (isUpdatingSlider || !book) return;
+                const target = parseInt(pageSlider.value, 10);
+                book.goTo(target);
+                // optimistic label update while animating
+                currentPageLabel.textContent = target;
+            });
+
+            // Prev / Next buttons
+            prevBtn.addEventListener('click', () => book && book.prev());
+            nextBtn.addEventListener('click', () => book && book.next());
+
+            // Fullscreen button (uses the library’s own method – works on iOS fallback too)
+            fullscreenBtn.addEventListener('click', () => {
+                if (book) book.toggleFullscreen();
+            });
+
+            // Keep the icon in sync with real fullscreen state
+            function syncFullscreenIcon() {
+                const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+                // Also detect the library’s fake-fullscreen class used on iPhone
+                const fakeFs = bookEl.classList.contains('fb-fake-fs') ||
+                               document.documentElement.classList.contains('fb-noscroll');
+
+                const active = isFs || fakeFs;
+                iconExpand.hidden = active;
+                iconCompress.hidden = !active;
+                fullscreenBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+            }
+
+            document.addEventListener('fullscreenchange', syncFullscreenIcon);
+            document.addEventListener('webkitfullscreenchange', syncFullscreenIcon);
+
+            // Observe class changes for the iOS fake-fullscreen path
+            const observer = new MutationObserver(syncFullscreenIcon);
+            observer.observe(bookEl, { attributes: true, attributeFilter: ['class'] });
+            observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+            // Keyboard niceties (library already handles ← → and F, but we keep focus friendly)
+            pageSlider.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                    // let the slider handle it; the book will follow via the input event
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
